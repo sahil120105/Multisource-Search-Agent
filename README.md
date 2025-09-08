@@ -34,8 +34,8 @@ Each source is independently analyzed and synthesized into a final answer — co
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/multisource-search-agent.git
-   cd multisource-search-agent
+   git clone https://github.com/sahil120105/Multisource-Search-Agent.git
+   cd Multisource-Search-Agent
    ```
 
 2. **Install Dependencies**
