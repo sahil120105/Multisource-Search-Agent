@@ -1,253 +1,108 @@
-from dotenv import load_dotenv
-from langchain_groq import ChatGroq
-from langchain_ollama import ChatOllama
-from typing import Annotated
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
-from pydantic import BaseModel, Field
-from typing_extensions import TypedDict, List
-from web_operations import google_search_func, bing_search_func, get_reddit_posts, get_reddit_comments
-from prompts import (
-    get_reddit_url_analysis_messages,
-    get_reddit_analysis_messages,
-    get_google_analysis_messages,
-    get_bing_analysis_messages,
-    get_synthesis_messages
-)
+import streamlit as st
+from agent import graph, State 
+import time
 
-
-load_dotenv()
-
-
-#llm = ChatOllama(model="llama3.2:1b", temperature=0)
-llm = ChatGroq(model_name= "meta-llama/llama-4-scout-17b-16e-instruct")
-
-
-# Defining State Object
-class State(TypedDict):
-    messages: Annotated[list, add_messages]
-    user_question: str | None
-    google_results: str | None
-    bing_results: str | None
-    reddit_results: str | None
-    selected_reddit_urls: list[str] | None
-    reddit_post_data: str | None
-    google_analysis: str | None
-    bing_analysis: str | None
-    reddit_analysis: str | None
-    final_answer: str | None
-
-
-class RedditURLAnalysis(BaseModel):
-    selected_urls: List[str] = Field(description="List of Reddit URLs that contain valuable information for answering the user's question")
-
-
-# Defining Nodes
-
-def google_search(state: State):
-    user_question = state.get("user_question", "")
-
-    print(f"Searching google for: {user_question}\n")
-
-    google_results = google_search_func(user_question)
-    print(google_results)
-    
-    return {"google_results": google_results}
-
-
-def bing_search(state: State):
-    user_question = state.get("user_question", "")
-
-    print(f"Searching Bing for: {user_question}\n")
-
-    bing_results = bing_search_func(user_question)
-    print(bing_results)
-
-    return {"bing_results": bing_results}
-
-
-def reddit_search(state: State):
-    user_question = state.get("user_question")
-
-    print(f"Searching Reddit for: {user_question}\n")
-
-    reddit_results = get_reddit_posts(user_question)
-    
-    return {"reddit_results": reddit_results}
-
-
-def analyze_reddit_posts(state: State):
-    user_question = state.get("user_question", "")
-    reddit_results = state.get("reddit_results", "")
-
-    if not reddit_results:
-        return {"selected_reddit_urls": []}
-    
-    structured_llm = llm.with_structured_output(RedditURLAnalysis)
-    messages = get_reddit_url_analysis_messages(user_question, reddit_results)
-
-    try:
-        analysis = structured_llm.invoke(messages)
-        selected_urls = analysis.selected_urls
-
-        print("Selected URLs:")
-        for i, url in enumerate(selected_urls, 1):
-            print(f"   {i}. {url}")
-
-    except Exception as e:
-        print(e)
-        selected_urls = []
-
-
-    return {"selected_reddit_urls": selected_urls}
-
-
-def retrieve_reddit_posts(state: State):
-
-    print("Getting reddit post comments...")
-
-    selected_urls = state.get("selected_reddit_urls", [])
-
-    print(f"Processing {len(selected_urls)} Reddit URLs")
-    reddit_post_data = get_reddit_comments(selected_urls)
-
-    if reddit_post_data:
-        print(f"Successfully got {len(reddit_post_data)} posts")
-    else:
-        print("Failed to get post data")
-        reddit_post_data = []
-
-    print(reddit_post_data)
-
-    if not selected_urls:
-        return {"reddit_post_data": []}
-    
-    return {"reddit_post_data": reddit_post_data}
-
-
-def analyze_google_results(state: State):
-    print("Analyzing google search results")
-
-    user_question = state.get("user_question", "")
-    google_results = state.get("google_results", "")
-
-    messages = get_google_analysis_messages(user_question, google_results)
-    reply = llm.invoke(messages)
-    return {"google_analysis": reply.content}
-
-
-def analyze_bing_results(state: State):
-    print("Analyzing bing search results")
-
-    user_question = state.get("user_question", "")
-    bing_results = state.get("bing_results", "")
-
-    messages = get_bing_analysis_messages(user_question, bing_results)
-    reply = llm.invoke(messages)
-
-    return {"bing_analysis": reply.content}
-
-
-def analyze_reddit_results(state: State):
-    print("Analyzing reddit search results")
-
-    user_question = state.get("user_question", "")
-    reddit_results = state.get("reddit_results", "")
-    reddit_post_data = state.get("reddit_post_data", "")
-
-    messages = get_reddit_analysis_messages(user_question, reddit_results, reddit_post_data)
-    reply = llm.invoke(messages)
-
-    return {"reddit_analysis": reply.content}
-
-def synthesize_analyses(state: State):
-    print("Combine all results together")
-
-    user_question = state.get("user_question", "")
-    google_analysis = state.get("google_analysis", "")
-    bing_analysis = state.get("bing_analysis", "")
-    reddit_analysis = state.get("reddit_analysis", "")
-
-    messages = get_synthesis_messages(
-        user_question, google_analysis, bing_analysis, reddit_analysis
+def main():
+    """
+    This function sets up and runs the Streamlit application with a standard Streamlit look.
+    """
+    # Configure the page layout and title
+    st.set_page_config(
+        page_title="Multisource Search Agent", 
+        layout="wide",
+        initial_sidebar_state="collapsed"
     )
 
-    reply = llm.invoke(messages)
-    final_answer = reply.content
+    # Use standard Streamlit components for title and subtitle
+    st.title("🕵️ Multisource Search Agent 🔎")
+    st.markdown("I use multiple search engines to find the most comprehensive answers.")
 
-    return {"final_answer": final_answer, "messages": [{"role": "assistant", "content": final_answer}]}
+    # About the agent section using an expander
+    with st.expander("About this Agent"):
+        st.write("This application leverages a multi-agent system built with LangGraph to perform parallel research from Google, Bing, and Reddit. The agent then analyzes and synthesizes the findings to provide a single, comprehensive answer.")
+        st.write("The agent's workflow is a multi-step process:")
+        st.write("1. **Parallel Search:** Searches across Google, Bing, and Reddit simultaneously.")
+        st.write("2. **Reddit Post Retrieval:** Finds and retrieves valuable information from relevant Reddit threads.")
+        st.write("3. **Analysis:** analyzes the information from each source independently.")
+        st.write("4. **Synthesis:** Combines all analyses to generate a single final answer.")
 
+    st.markdown("---")
 
-# Building the Graph
-graph_builder = StateGraph(State)
+    # Main input and button section
+    user_input = st.text_input("What would you like me to research?", placeholder="e.g., How to build a solar-powered garden light?", key="user_input")
 
+    if st.button("Start Research"):
+        if not user_input:
+            st.warning("Please enter a question to start the research.")
+            return
 
-graph_builder.add_node("google_search", google_search)
-graph_builder.add_node("bing_search", bing_search)
-graph_builder.add_node("reddit_search", reddit_search)
-graph_builder.add_node("analyze_reddit_posts", analyze_reddit_posts)
-graph_builder.add_node("retrieve_reddit_posts", retrieve_reddit_posts)
-graph_builder.add_node("analyze_google_results", analyze_google_results)
-graph_builder.add_node("analyze_bing_results", analyze_bing_results)
-graph_builder.add_node("analyze_reddit_results", analyze_reddit_results)
-graph_builder.add_node("synthesize_analyses", synthesize_analyses)
+        # Use st.status for a clean, expanding progress indicator
+        with st.status("Starting research...", expanded=True) as status:
+            try:
+                status.update(label="Initializing agent...", state="running")
+                initial_state = State(
+                    messages=[{"role": "user", "content": user_input}],
+                    user_question=user_input,
+                )
+                
+                # Use st.progress for a progress bar
+                progress_bar = st.progress(0, text="Agent progress...")
+                
+                # We will store the final answer in this variable as soon as it's generated.
+                final_answer = None
 
-graph_builder.add_edge(START, "google_search")
-graph_builder.add_edge(START, "bing_search")
-graph_builder.add_edge(START, "reddit_search")
+                # LangGraph's stream method allows us to get updates as each node finishes
+                total_nodes = 9 
+                nodes_completed = 0
+                
+                for step in graph.stream(initial_state):
+                    for node_name, node_output in step.items():
+                        if node_name == "__end__":
+                            continue
+                        
+                        nodes_completed += 1
+                        progress_percentage = min(int((nodes_completed / total_nodes) * 100), 100)
+                        progress_bar.progress(progress_percentage, text=f"Executing node: {node_name}...")
+                        
+                        # Update status with a more specific message for each node
+                        if node_name == "google_search":
+                            status.update(label="Searching Google...", state="running")
+                        elif node_name == "bing_search":
+                            status.update(label="Searching Bing...", state="running")
+                        elif node_name == "reddit_search":
+                            status.update(label="Searching Reddit for relevant threads...", state="running")
+                        elif node_name == "analyze_reddit_posts":
+                            status.update(label="Analyzing and selecting key Reddit threads...", state="running")
+                        elif node_name == "retrieve_reddit_posts":
+                            status.update(label="Retrieving comments from selected Reddit threads...", state="running")
+                        elif node_name == "analyze_google_results":
+                            status.update(label="Analyzing Google search findings...", state="running")
+                        elif node_name == "analyze_bing_results":
+                            status.update(label="Analyzing Bing search findings...", state="running")
+                        elif node_name == "analyze_reddit_results":
+                            status.update(label="Analyzing information from Reddit...", state="running")
+                        elif node_name == "synthesize_analyses":
+                            status.update(label="Synthesizing all analyses into a final answer...", state="running")
+                            # This is the key change: Capture the final answer here before the stream ends.
+                            final_answer = node_output.get("final_answer")
 
-graph_builder.add_edge("google_search", "analyze_reddit_posts")
-graph_builder.add_edge("bing_search", "analyze_reddit_posts")
-graph_builder.add_edge("reddit_search", "analyze_reddit_posts")
-graph_builder.add_edge("analyze_reddit_posts", "retrieve_reddit_posts")
+                progress_bar.progress(100, text="Research complete!")
+                time.sleep(1) # Give a moment for the user to see 100%
 
-graph_builder.add_edge("retrieve_reddit_posts", "analyze_google_results")
-graph_builder.add_edge("retrieve_reddit_posts", "analyze_bing_results")
-graph_builder.add_edge("retrieve_reddit_posts", "analyze_reddit_results")
+                if final_answer:
+                    status.update(label="✨ Synthesis complete. Displaying final answer.", state="complete", expanded=False)
+                    
+                    st.markdown("---")
+                    st.success("### Final Answer")
+                    st.write(final_answer)
+                else:
+                    status.update(label="⚠️ Failed to generate a final answer.", state="error", expanded=False)
+                    st.error("I'm sorry, I was unable to generate a final answer. Please try a different query.")
 
-graph_builder.add_edge("analyze_google_results", "synthesize_analyses")
-graph_builder.add_edge("analyze_bing_results", "synthesize_analyses")
-graph_builder.add_edge("analyze_reddit_results", "synthesize_analyses")
-
-graph_builder.add_edge("synthesize_analyses", END)
-
-graph = graph_builder.compile()
-
-
-# Execute Agent
-def run_chatbot():
-    print("Mutlitsource Search Agent")
-    print("Type exit to quit\n")
-
-    while True:
-        user_input = input("Ask me anything: ")
-        if user_input == "exit":
-            print("Bye Bye!!")
-            break
-
-        state = {
-            "messages" : [{"role":"user", "content": user_input}],
-            "user_question" : user_input,
-            "google_results": None,
-            "bing_results": None,
-            "reddit_results": None,
-            "selected_redit_urls": None,
-            "reddit_post_data": None,
-            "google_analysis": None,
-            "bing_analysis": None,
-            "reddit_analysis": None,
-            "final_answer": None,
-        }
-
-        print("Starting parallel research process...")
-        print("Launching Google, Bing, Reddit Search\n")
-
-        final_state = graph.invoke(state)
-        
-        if final_state.get("final_answer"):
-            print(f"Final Answer: {final_state.get("final_answer")}\n")
-
-        print("-" * 80)
+            except Exception as e:
+                status.update(label="❌ An error occurred during the process.", state="error", expanded=False)
+                st.error(f"An error occurred: {e}")
+                st.info("Please check the terminal for detailed logs.")
 
 if __name__ == "__main__":
-    run_chatbot()
+    main()

@@ -5,7 +5,4 @@ langchain-google-genai
 langchain-ollama
 python-dotenv
 google-search-results
-pygraphviz
-graphviz
-pipwin
-ipython
+streamlit
