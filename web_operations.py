@@ -5,12 +5,12 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 SC_API_KEY = os.getenv("SC_API_KEY")
-
+SERP_API_KEY = os.getenv("SERP_API_KEY")
 
 
 def google_search_func(query):
     params = {
-    "api_key": "adfddf622694617e348f915e7cdd545f4076aa781148dff3d766123dc161f47a",
+    "api_key": SERP_API_KEY,
     "engine": "google",
     "q": query,
     "google_domain": "google.com",
@@ -32,7 +32,7 @@ def google_search_func(query):
 
 def bing_search_func(query):
     params = {
-    "api_key": "adfddf622694617e348f915e7cdd545f4076aa781148dff3d766123dc161f47a",
+    "api_key": SERP_API_KEY,
     "engine": "bing",
     "q": query,
     "google_domain": "google.com",
