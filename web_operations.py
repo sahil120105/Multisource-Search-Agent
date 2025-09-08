@@ -81,7 +81,7 @@ def get_reddit_comments(post_urls):
 
     
     headers = {
-        "x-api-key": "ahkwZqktvnWl73uadPlcJAiTKTs2"
+        "x-api-key": SC_API_KEY,
     }
     parsed_comments = []
 
@@ -89,9 +89,7 @@ def get_reddit_comments(post_urls):
         url = f"https://api.scrapecreators.com/v1/reddit/post/comments?url={url}&trim=True"
         response = requests.get(url, headers=headers)
         data = response.json()
-
         
-
         post_title = data['post']['title']
         for comment in data["comments"]:
             parsed_comment = {
